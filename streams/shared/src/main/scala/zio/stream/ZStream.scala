@@ -4443,22 +4443,23 @@ object ZStream extends ZStreamPlatformSpecificConstructors {
     chunkSize: => Int = ZStream.DefaultChunkSize
   )(implicit trace: Trace): ZStream[Any, IOException, Byte] =
     ZStream.succeed((is, chunkSize)).flatMap { case (is, chunkSize) =>
-      ZStream.fromZIO(
-        ZIO.repeatZIOChunkOption {
-          for {
-            bufArray  <- ZIO.succeed(Array.ofDim[Byte](chunkSize))
-            bytesRead <- ZIO.attemptBlockingIO(is.read(bufArray))
-            bytes <- if (bytesRead < 0)
-                       Exit.failNone
-                     else if (bytesRead == 0)
-                       Exit.emptyChunk
-                     else if (bytesRead < chunkSize)
-                       ZIO.succeed(Chunk.fromArray(bufArray).take(bytesRead))
-                     else
-                       ZIO.succeed(Chunk.fromArray(bufArray))
-          } yield bytes
-        }.interruptible
-      )
+      ZStream.repeatZIOOption {
+        for {
+          bufArray  <- ZIO.succeed(Array.ofDim[Byte](chunkSize))
+          bytesRead <- ZIO.attemptBlocking(is.read(bufArray)).mapError {
+                        case _: IOException => None
+                        case t              => Some(t)
+                      }
+          bytes <- if (bytesRead < 0)
+                     Exit.failNone
+                   else if (bytesRead == 0)
+                     Exit.emptyChunk
+                   else if (bytesRead < chunkSize)
+                     ZIO.succeed(Chunk.fromArray(bufArray).take(bytesRead))
+                   else
+                     ZIO.succeed(Chunk.fromArray(bufArray))
+        } yield bytes
+      }
     }
 
   /**
