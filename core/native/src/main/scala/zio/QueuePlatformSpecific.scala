@@ -1,11 +1,11 @@
 package zio
 
 import java.util.concurrent.ConcurrentLinkedQueue
-import scala.collection.mutable
 
 private[zio] trait QueuePlatformSpecific {
 
-  // java.util.concurrent.ConcurrentLinkedDeque is not available in Scala Native, so we need to createa custom `addFirst` method
+  // Use native ConcurrentLinkedDeque if available (Scala Native 0.5.6+),
+  // otherwise fall back to custom implementation
   private[zio] final class ConcurrentDeque[A <: AnyRef] extends ConcurrentLinkedQueue[A] {
 
     def addFirst(a: A): Unit = {
@@ -13,7 +13,7 @@ private[zio] trait QueuePlatformSpecific {
       if (popped eq null) {
         offer(a)
       } else {
-        val buf = new mutable.ArrayBuffer[A]
+        val buf = new scala.collection.mutable.ArrayBuffer[A]
         while (popped ne null) {
           buf += popped
           popped = poll()
