@@ -4446,7 +4446,7 @@ object ZStream extends ZStreamPlatformSpecificConstructors {
       ZStream.repeatZIOChunkOption {
         for {
           bufArray  <- ZIO.succeed(Array.ofDim[Byte](chunkSize))
-          bytesRead <- ZIO.attemptBlockingIO(is.read(bufArray))
+          bytesRead <- ZIO.attemptBlockingIO(is.read(bufArray)).asSomeError
           bytes <- if (bytesRead < 0)
                      Exit.failNone
                    else if (bytesRead == 0)
