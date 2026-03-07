@@ -673,8 +673,9 @@ sealed trait ZChannel[-Env, -InErr, -InElem, -InDone, +OutErr, +OutElem, +OutDon
         val input       = SingleProducerAsyncInput.unsafe.make[InErr, InElem, InDone](fiberId)(Unsafe)
         val queueReader = ZChannel.fromInput(input)
         val n0          = n.toLong
-        val bufferSize0 = bufferSize
-        val outgoing    = Queue.unsafe.bounded[Fiber[Either[Unit, OutDone], OutElem2]](bufferSize0, fiberId)(Unsafe)
+        // Use unbounded queue since semaphore already bounds concurrent operations to n
+        // This ensures parallelism is controlled solely by the semaphore, not the buffer size
+        val outgoing    = Queue.unsafe.unbounded[Fiber[Either[Unit, OutDone], OutElem2]](fiberId)(Unsafe)
         val errorSignal = Promise.unsafe.make[Nothing, Unit](fiberId)(Unsafe)
         val permits     = Semaphore.unsafe.make(n0)(Unsafe)
         val failureRef  = Ref.unsafe.make[Cause[OutErr1]](Cause.empty)(Unsafe)
@@ -764,7 +765,8 @@ sealed trait ZChannel[-Env, -InErr, -InElem, -InDone, +OutErr, +OutElem, +OutDon
       for {
         input       <- SingleProducerAsyncInput.make[InErr, InElem, InDone]
         queueReader  = ZChannel.fromInput(input)
-        outgoing    <- Queue.bounded[Exit[Either[Unit, OutDone], OutElem2]](bufferSize)
+        // Use unbounded queue since semaphore already bounds concurrent operations to n
+        outgoing    <- Queue.unbounded[Exit[Either[Unit, OutDone], OutElem2]]
         _           <- scope.addFinalizer(outgoing.shutdown)
         errorSignal <- Promise.make[Nothing, Unit]
         permits     <- Semaphore.make(n.toLong)
