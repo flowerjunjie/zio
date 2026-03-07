@@ -129,7 +129,12 @@ private[zio] class WeakConcurrentBag[A <: AnyRef](nurserySize: Int, isAlive: IsA
     while (iter.hasNextAt(i)) {
       val ref   = iter.nextAt(i)
       val value = ref.get()
-      if ((value ne null) && isAlive(value)) graduates.add(ref)
+      // Scala Native fix: check if graduates is null before adding
+      if ((value ne null) && isAlive(value)) {
+        if (graduates ne null) {
+          graduates.add(ref)
+        }
+      }
       i += 1
     }
   }
