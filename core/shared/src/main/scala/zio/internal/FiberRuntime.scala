@@ -1133,12 +1133,15 @@ final class FiberRuntime[E, A](fiberId: FiberId.Runtime, fiberRefs0: FiberRefs, 
 
                 continuation match {
                   case flatMap: ZIO.FlatMap[Any, Any, Any, Any] =>
+                    updateLastTrace(flatMap.trace)
                     cur = flatMap.successK(value)
 
                   case foldZIO: ZIO.FoldZIO[Any, Any, Any, Any, Any] =>
+                    updateLastTrace(foldZIO.trace)
                     cur = foldZIO.successK(value)
 
                   case map: ZIO.Mapped[Any, Any, Any, Any] =>
+                    updateLastTrace(map.trace)
                     value = map.successK(value)
 
                   case update =>
@@ -1171,12 +1174,15 @@ final class FiberRuntime[E, A](fiberId: FiberId.Runtime, fiberRefs0: FiberRefs, 
 
                 continuation match {
                   case flatMap: ZIO.FlatMap[Any, Any, Any, Any] =>
+                    updateLastTrace(flatMap.trace)
                     cur = flatMap.successK(value)
 
                   case foldZIO: ZIO.FoldZIO[Any, Any, Any, Any, Any] =>
+                    updateLastTrace(foldZIO.trace)
                     cur = foldZIO.successK(value)
 
                   case map: ZIO.Mapped[Any, Any, Any, Any] =>
+                    updateLastTrace(map.trace)
                     value = map.successK(value)
 
                   case update =>
