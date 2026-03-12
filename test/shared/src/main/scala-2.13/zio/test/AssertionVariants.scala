@@ -75,8 +75,9 @@ trait AssertionVariants {
             case (left, right)                             => left == right
           }
           TestTrace.boolean(result) {
-            if (expected.isInstanceOf[Product]) {
-              M.text(diffProduct(actual, expected))
+            val diff = diffProduct(actual, expected)
+            if (diff.nonEmpty) {
+              M.text(diff)
             } else {
               M.pretty(actual) + M.equals + M.pretty(expected)
             }
