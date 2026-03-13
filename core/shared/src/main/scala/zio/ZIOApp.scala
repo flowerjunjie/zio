@@ -53,6 +53,37 @@ trait ZIOApp extends ZIOAppPlatformSpecific with ZIOAppVersionSpecific {
    * exiting.
    *
    * '''NOTE''': This is currently used only for JVM & ScalaNative applications
+   *
+   * @note
+   *   The graceful shutdown timeout determines how long the application will wait
+   *   for all running finalizers to complete before forcibly exiting. This is
+   *   particularly important for applications that need to:
+   *
+   *   - Release resources cleanly (e.g., close file handles, network connections)
+   *   - Flush buffers and write pending data
+   *   - Complete in-progress transactions
+   *   - Perform cleanup operations
+   *
+   * @example
+   *   {{{
+   *   import zio._
+   *
+   *   object MyApp extends ZIOApp {
+   *     // Wait up to 10 seconds for finalizers to complete
+   *     override def gracefulShutdownTimeout: Duration = 10.seconds
+   *
+   *     def run = myLogic
+   *   }
+   *   }}}
+   *
+   * @see
+   *   [[ZIOApp]] for more information about application lifecycle
+   *
+   * @note
+   *   If not overridden, the default value is `Duration.Infinity`, which means
+   *   the application will wait indefinitely for all finalizers to complete.
+   *   For production applications, it's recommended to set a reasonable timeout
+   *   to prevent hanging during shutdown.
    */
   def gracefulShutdownTimeout: Duration = Duration.Infinity
 
