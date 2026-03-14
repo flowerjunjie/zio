@@ -4407,6 +4407,30 @@ object ZStream extends ZStreamPlatformSpecificConstructors {
       }
     }
 
+
+  /**
+   * Creates a stream from an `InputStream` that can be interrupted.
+   * 
+   * Unlike `fromInputStream`, this stream properly handles interruption by
+   * closing the stream when the fiber is interrupted.
+   *
+   * @param is The input stream to read from
+   * @param chunkSize The size of chunks to read from the stream
+   * @return A stream of bytes from the input stream
+   */
+  def fromInputStreamInterruptible(
+    is: => InputStream,
+    chunkSize: Int = 8192
+  ): ZStream[Any, IOException, Byte] = {
+    ZStream.scope {
+      for {
+        stream <- ZStream.fromEffect(ZIO.attempt(is).onInterrupt(ZIO.succeed(is.close())).orDie)
+        _      <- ZStream.fromEffect(ZIO.addFinalizer(ZIO.succeed(stream.close())))
+        bytes  <- ZStream.fromInputStream(stream, chunkSize)
+      } yield bytes
+    }
+  }
+
   /**
    * Creates a stream from a `java.io.InputStream`. Ensures that the input
    * stream is closed after it is exhausted.
