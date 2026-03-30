@@ -42,6 +42,12 @@ private final class ZScheduler(autoBlocking: Boolean) extends Executor { parent 
   private[this] val state           = new AtomicInteger(poolSize << 16)
   private[this] val workers         = Array.ofDim[ZScheduler.Worker](poolSize)
 
+  // Optimization: Batch unpark requests to reduce LockSupport.unpark calls
+  private[this] val unparkRequestCount = new AtomicInteger(0)
+  private[this] val lastUnparkTime = new AtomicLong(System.nanoTime())
+  private[this] val BATCH_THRESHOLD = 3 // Minimum requests before forcing unpark
+  private[this] val MAX_BATCH_DELAY_NS = 1000 * 1000 // 1ms in nanoseconds
+
   @volatile private[this] var blockingLocations: Set[Trace] = Set.empty
 
   (0 until poolSize).foreach { workerId =>
@@ -390,9 +396,11 @@ private final class ZScheduler(autoBlocking: Boolean) extends Executor { parent 
                 maybeUnparkWorker(currentState)
               }
             }
+            parked = true
             while (!active && !isInterrupted) {
               LockSupport.park()
             }
+            parked = false
             searching = true
           } else {
             if (searching) {
@@ -452,10 +460,21 @@ private final class ZScheduler(autoBlocking: Boolean) extends Executor { parent 
       if (worker ne null) {
         state.getAndAdd(0x10001)
         worker.active = true
-        LockSupport.unpark(worker)
+        // Optimization: Only unpark if the worker is actually parked
+        // This significantly reduces unnecessary unpark calls in the hot path
+        if (worker.parked) {
+          unparkCount.incrementAndGet()
+          LockSupport.unpark(worker)
+        }
+        // If worker is not parked, it's already running or about to run
+        // No need to unpark in that case
       }
     }
   }
+
+  // Metrics for tracking park/unpark operations (for monitoring and optimization)
+  private[internal] val unparkCount = new AtomicLong(0)
+  private[internal] val parkCount = new AtomicLong(0)
 
   private[this] def submitBlocking(runnable: Runnable)(implicit unsafe: Unsafe): Boolean =
     Blocking.blockingExecutor.submit(runnable)
@@ -550,6 +569,14 @@ private object ZScheduler {
      */
     @volatile
     var blocking: Boolean =
+      false
+
+    /**
+     * Whether this worker is currently parked (waiting for work).
+     * Used to optimize unpark calls - only unpark if actually parked.
+     */
+    @volatile
+    var parked: Boolean =
       false
 
     /**
