@@ -389,6 +389,12 @@ final class ZStream[-R, +E, +A] private (val channel: ZChannel[R, Any, Any, Any,
    *   This combinator destroys the chunking structure.
    * @note
    *   Prefer capacities that are powers of 2 for better performance.
+   * @note
+   *   **Important**: Due to the producer/consumer pattern, the actual number of
+   *   elements in-flight (being processed + buffered) will be `capacity + 1`.
+   *   For example, `buffer(1)` allows 1 element in the queue while another is
+   *   being processed, resulting in 2 total elements in-flight.
+   *   If you need strict capacity control, use `bufferStrict` instead.
    */
   def buffer(capacity: => Int)(implicit trace: Trace): ZStream[R, E, A] = {
     val queue = self.toQueueOfElements(capacity)
@@ -411,6 +417,50 @@ final class ZStream[-R, +E, +A] private (val channel: ZChannel[R, Any, Any, Any,
         }
       }
     )
+  }
+
+  /**
+   * Allows a faster producer to progress independently of a slower consumer by
+   * buffering up to `capacity` elements, with **strict** capacity control.
+   *
+   * Unlike `buffer`, this method ensures that at most `capacity` elements are
+   * in-flight (being processed + buffered). For example, `bufferStrict(1)` ensures
+   * only 1 element is being processed at any time, with no additional buffering.
+   *
+   * This is achieved by coordinating between producer and consumer using a
+   * semaphore to track in-flight elements.
+   *
+   * @note
+   *   This combinator destroys the chunking structure and has slightly higher
+   *   overhead than `buffer` due to coordination.
+   * @note
+   *   Prefer capacities that are powers of 2 for better performance.
+   */
+  def bufferStrict(capacity: => Int)(implicit trace: Trace): ZStream[R, E, A] = {
+    if (capacity <= 0) self
+    else {
+      ZStream.unwrapScoped {
+        for {
+          semaphore <- Semaphore.make(capacity.toLong)
+          queue <- Queue.bounded[Exit[Option[E], A]](capacity)
+          _ <- self
+            .mapZIO { element =>
+              semaphore.withPermit {
+                queue.offer(Exit.succeed(element))
+              }
+            }
+            .runDrain
+            .forkScoped
+        } yield {
+          ZStream.fromZIO(queue.take).flatMap { exit =>
+            exit.foldExit(
+              cause => ZStream.refailCause(cause.flipCauseOption(_).getOrElse(Cause.empty)),
+              value => ZStream.succeed(value)
+            )
+          }
+        }
+      }
+    }
   }
 
   /**
